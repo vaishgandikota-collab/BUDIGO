@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Budigo",
+    "slug": "budigo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "budigo",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F5F7"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.budigo.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Budigo requires your location to display your marker on the shared travel map and calculate travel time to the destination and meeting point.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Budigo needs background location to notify your travel group when you arrive safely or encounter delays.",
+        "NSLocationAlwaysUsageDescription": "Budigo needs your location while travelling with your group.",
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+      },
+      "config": {
+        "googleMapsApiKey": "$(EXPO_PUBLIC_GOOGLE_MAPS_API_KEY)"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F8F5F7"
+      },
+      "package": "com.budigo.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "INTERNET"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "$(EXPO_PUBLIC_GOOGLE_MAPS_API_KEY)"
+        }
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Budigo to share your live location with your travel buddies while the trip is active.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ]
+    ]
+  }
+}
+
