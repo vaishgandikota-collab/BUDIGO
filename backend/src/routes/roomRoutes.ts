@@ -4,19 +4,19 @@ import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddle
 
 const router = Router();
 
+// Static routes must be registered before parameterized /:roomId routes
+router.get('/my-trips', authMiddleware, RoomController.getMyTrips);
+router.post('/join', authMiddleware, RoomController.joinRoom);
+router.post('/', authMiddleware, RoomController.createRoom);
+
 // Public / Guest accessible room viewing
-router.get('/:roomId', optionalAuthMiddleware, RoomController.getRoom);
 router.get('/:roomId/members', optionalAuthMiddleware, RoomController.getMembers);
+router.get('/:roomId', optionalAuthMiddleware, RoomController.getRoom);
 
-// Protected room management
-router.use(authMiddleware);
-
-router.post('/', RoomController.createRoom);
-router.post('/join', RoomController.joinRoom);
-router.get('/my-trips', RoomController.getMyTrips);
-router.post('/:roomId/leave', RoomController.leaveRoom);
-router.patch('/:roomId/destination', RoomController.updateDestination);
-router.post('/:roomId/end', RoomController.endRoom);
+// Parameterized protected room actions
+router.post('/:roomId/leave', authMiddleware, RoomController.leaveRoom);
+router.patch('/:roomId/destination', authMiddleware, RoomController.updateDestination);
+router.post('/:roomId/end', authMiddleware, RoomController.endRoom);
 
 export default router;
 
