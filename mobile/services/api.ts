@@ -142,7 +142,6 @@ class ApiService {
               full_name: fullName,
               email: supaData.user.email || email,
               avatar_url: `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(fullName)}`,
-              created_at: new Date().toISOString(),
             };
             const token = supaData.session?.access_token || `supa_${supaData.user.id}`;
             await this.setToken(token);
@@ -161,7 +160,6 @@ class ApiService {
         full_name: fullName,
         email,
         avatar_url: `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(fullName)}`,
-        created_at: new Date().toISOString(),
       };
       const token = `preview_token_${fallbackId}`;
       await this.setToken(token);
@@ -200,7 +198,6 @@ class ApiService {
               full_name: fullName,
               email: supaData.user.email || email,
               avatar_url: `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(fullName)}`,
-              created_at: new Date().toISOString(),
             };
             const token = supaData.session?.access_token || `supa_${supaData.user.id}`;
             await this.setToken(token);
@@ -221,7 +218,6 @@ class ApiService {
         full_name: fullName,
         email,
         avatar_url: `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(fullName)}`,
-        created_at: existing?.created_at || new Date().toISOString(),
       };
       const token = `preview_token_${fallbackId}`;
       await this.setToken(token);
@@ -287,9 +283,9 @@ class ApiService {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
       const fallbackRoom: Room = {
         id: roomId,
-        code,
-        name: params.roomName,
-        created_by: user?.id || 'host',
+        room_code: code,
+        room_name: params.roomName,
+        creator_id: user?.id || 'host',
         destination_name: params.destinationName,
         destination_latitude: params.destinationLatitude,
         destination_longitude: params.destinationLongitude,
@@ -301,10 +297,12 @@ class ApiService {
         id: `member_${Date.now()}`,
         room_id: roomId,
         user_id: user?.id || 'host',
-        role: 'host',
         display_name: user?.full_name || 'Host',
-        share_location: true,
+        marker_color: '#D1956A',
+        member_role: 'creator',
         joined_at: new Date().toISOString(),
+        location_sharing_enabled: true,
+        status: 'Arrived',
       };
       await saveStoredRoom(fallbackRoom);
       return { success: true, room: fallbackRoom, member: fallbackMember };
@@ -321,14 +319,14 @@ class ApiService {
       return data;
     } catch (err: any) {
       const rooms = await getStoredRooms();
-      const matched = rooms.find((r) => r.code?.toUpperCase() === roomCode.trim().toUpperCase());
+      const matched = rooms.find((r) => r.room_code?.toUpperCase() === roomCode.trim().toUpperCase());
       const roomId = matched ? matched.id : `room_${roomCode.trim().toLowerCase()}`;
       const user = await this.getUser();
       const fallbackRoom: Room = matched || {
         id: roomId,
-        code: roomCode.trim().toUpperCase(),
-        name: `Trip ${roomCode.trim().toUpperCase()}`,
-        created_by: 'host',
+        room_code: roomCode.trim().toUpperCase(),
+        room_name: `Trip ${roomCode.trim().toUpperCase()}`,
+        creator_id: 'host',
         destination_name: 'Budigo Destination',
         destination_latitude: 12.9716,
         destination_longitude: 77.5946,
@@ -339,10 +337,12 @@ class ApiService {
         id: `member_${Date.now()}`,
         room_id: roomId,
         user_id: user?.id || `user_${Date.now()}`,
-        role: 'member',
         display_name: displayName,
-        share_location: shareLocation,
+        marker_color: '#4C78C9',
+        member_role: 'member',
         joined_at: new Date().toISOString(),
+        location_sharing_enabled: shareLocation,
+        status: 'On the Way',
       };
       await saveStoredRoom(fallbackRoom);
       return { success: true, room: fallbackRoom, member: fallbackMember };
@@ -372,10 +372,12 @@ class ApiService {
           id: `member_${user?.id || '1'}`,
           room_id: roomId,
           user_id: user?.id || '1',
-          role: 'host',
           display_name: user?.full_name || 'Host',
-          share_location: true,
+          marker_color: '#D1956A',
+          member_role: 'creator',
           joined_at: new Date().toISOString(),
+          location_sharing_enabled: true,
+          status: 'Arrived',
         },
       ];
       return { success: true, members };
@@ -480,17 +482,6 @@ class ApiService {
         body: JSON.stringify({ enabled }),
       }
     );
-  }
-
-  // --- Route Navigation APIs ---
-  async calculateRoute(origin: { latitude: number; longitude: number }, destination: { latitude: number; longitude: number }, travelMode = 'DRIVE') {
-    return this.request<{
-      success: boolean;
-      route: { distanceMeters: number; durationSeconds: number; encodedPolyline: string };
-    }>('/api/routes/calculate', {
-      method: 'POST',
-      body: JSON.stringify({ origin, destination, travelMode }),
-    });
   }
 
   // --- Smart Meeting Point APIs ---
