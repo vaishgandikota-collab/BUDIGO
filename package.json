@@ -1,0 +1,10 @@
+{
+  "name": "budigo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:all": "cd mobile && npm install --legacy-peer-deps",
+    "build": "cd mobile && npm install --legacy-peer-deps && npx expo export --platform web",
+    "export": "cd mobile && npx expo export --platform web"
+  }
+}
