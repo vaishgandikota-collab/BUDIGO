@@ -67,7 +67,11 @@ export class MeetingPointController {
       let meetingPoints: MeetingPoint[] = [];
 
       // 2. DISCOVERY LOGIC: "Near Destination" (Default) vs "Fair for Everyone" (Minimax)
-      if (mode === 'fair_for_everyone') {
+      const memMembers = inMemoryMembers.get(roomId) || [];
+      const activeLocCount = memMembers.filter((m) => m.location_sharing_enabled && inMemoryLocations.has(`${roomId}:${m.user_id}`)).length;
+      const shouldUseFairMode = mode === 'fair_for_everyone' || (!req.body.mode && activeLocCount > 1);
+
+      if (shouldUseFairMode) {
         // Collect active participants from room
         let participants: ParticipantStartPoint[] = [];
 
@@ -158,7 +162,7 @@ export class MeetingPointController {
           radiusMeters
         );
 
-        meetingPoints = candidatePlaces.map((c, idx) => ({
+        meetingPoints = candidatePlaces.slice(0, 3).map((c, idx) => ({
           id: `mp_dest_${Date.now()}_${idx + 1}`,
           room_id: roomId,
           place_id: c.placeId,
@@ -305,7 +309,11 @@ export class MeetingPointController {
             .single();
 
           if (mp) {
-            // Allow confirmation if user is room creator or in demo mode
+            // Only room creator / host can confirm the meeting point
+            const creatorId = mp.rooms?.creator_id || (mp.rooms as any)?.created_by;
+            if (creatorId && creatorId !== userId) {
+              return res.status(403).json({ success: false, error: 'Only the room host can confirm the meeting point.' });
+            }
             await supabase.from('meeting_points').update({ is_confirmed: false }).eq('room_id', mp.room_id);
             const { data: confirmed } = await supabase
               .from('meeting_points')
@@ -326,6 +334,11 @@ export class MeetingPointController {
         for (const [roomId, points] of inMemoryMeetingPoints.entries()) {
           const found = points.find((p) => p.id === id);
           if (found) {
+            const room = inMemoryRooms.get(roomId);
+            const creatorId = room?.creator_id || (room as any)?.created_by;
+            if (creatorId && creatorId !== userId) {
+              return res.status(403).json({ success: false, error: 'Only the room host can confirm the meeting point.' });
+            }
             points.forEach((p) => (p.is_confirmed = p.id === id));
             meetingPoint = found;
             break;
