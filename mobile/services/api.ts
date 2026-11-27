@@ -125,7 +125,10 @@ class ApiService {
       await this.setUser(data.user);
       return data;
     } catch (err: any) {
-      console.warn('[Budigo Auth] API register failed, attempting fallback:', err?.message);
+      if (!err?.isNetworkError) {
+        throw err;
+      }
+      console.warn('[Budigo Auth] Backend unreachable on register, attempting fallback:', err?.message);
 
       // Fallback 1: Direct Supabase Auth
       if (supabase && password) {
@@ -181,7 +184,10 @@ class ApiService {
       await this.setUser(data.user);
       return data;
     } catch (err: any) {
-      console.warn('[Budigo Auth] API login failed, attempting fallback:', err?.message);
+      if (!err?.isNetworkError) {
+        throw err;
+      }
+      console.warn('[Budigo Auth] Backend unreachable on login, attempting fallback:', err?.message);
 
       // Fallback 1: Direct Supabase Auth
       if (supabase && password) {
@@ -249,6 +255,12 @@ class ApiService {
   }
 
   async getProfile() {
+    const token = await this.initToken();
+    if (token && token.startsWith('preview_token_')) {
+      const user = await this.getUser();
+      if (user) return { success: true, user };
+      throw new Error('Not authenticated');
+    }
     try {
       return await this.request<{ success: boolean; user: UserProfile }>('/api/auth/profile');
     } catch {
