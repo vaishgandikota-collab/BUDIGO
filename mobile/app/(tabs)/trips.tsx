@@ -22,6 +22,11 @@ export default function MyTripsScreen() {
 
   const loadTrips = async () => {
     try {
+      const token = await api.initToken();
+      if (!token) {
+        setTrips([]);
+        return;
+      }
       const res = await api.getMyTrips().catch(() => ({ trips: [] }));
       setTrips(res.trips || []);
     } catch (e) {

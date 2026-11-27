@@ -22,6 +22,11 @@ export default function NotificationsScreen() {
 
   const loadNotifications = async () => {
     try {
+      const token = await api.initToken();
+      if (!token) {
+        setNotifications([]);
+        return;
+      }
       const res = await api.getNotifications().catch(() => ({ notifications: [] }));
       setNotifications(res.notifications || []);
     } catch (e) {

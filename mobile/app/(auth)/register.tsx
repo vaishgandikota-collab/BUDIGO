@@ -21,6 +21,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ fullName?: string; email?: string; password?: string }>({});
+  const [generalError, setGeneralError] = useState<string | null>(null);
 
   const handleRegister = async () => {
     const errs: { fullName?: string; email?: string; password?: string } = {};
@@ -34,12 +35,15 @@ export default function RegisterScreen() {
     }
 
     setErrors({});
+    setGeneralError(null);
     try {
       setLoading(true);
       await api.register(fullName.trim(), email.trim(), password);
       router.replace('/(tabs)');
     } catch (err: any) {
-      Alert.alert('Registration Failed', err.message || 'Could not create account');
+      const msg = err.message || 'Could not create account';
+      setGeneralError(msg);
+      Alert.alert('Registration Failed', msg);
     } finally {
       setLoading(false);
     }
@@ -93,6 +97,12 @@ export default function RegisterScreen() {
             }}
             error={errors.password}
           />
+
+          {generalError && (
+            <View style={{ backgroundColor: '#FDF2F2', borderWidth: 1, borderColor: '#F5C6CB', borderRadius: 10, padding: 12, marginBottom: 14 }}>
+              <Text style={{ color: '#9E3339', fontSize: 13, fontWeight: '600' }}>{generalError}</Text>
+            </View>
+          )}
 
           <Button
             title="Create Account"

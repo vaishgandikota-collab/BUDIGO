@@ -20,6 +20,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [generalError, setGeneralError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     const errs: { email?: string; password?: string } = {};
@@ -32,12 +33,15 @@ export default function LoginScreen() {
     }
 
     setErrors({});
+    setGeneralError(null);
     try {
       setLoading(true);
       await api.login(email.trim(), password);
       router.replace('/(tabs)');
     } catch (err: any) {
-      Alert.alert('Login Failed', err.message || 'Invalid email or password.');
+      const msg = err.message || 'Invalid email or password.';
+      setGeneralError(msg);
+      Alert.alert('Login Failed', msg);
     } finally {
       setLoading(false);
     }
@@ -96,6 +100,12 @@ export default function LoginScreen() {
           >
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
+
+          {generalError && (
+            <View style={{ backgroundColor: '#FDF2F2', borderWidth: 1, borderColor: '#F5C6CB', borderRadius: 10, padding: 12, marginBottom: 14 }}>
+              <Text style={{ color: '#9E3339', fontSize: 13, fontWeight: '600' }}>{generalError}</Text>
+            </View>
+          )}
 
           <Button
             title="Sign In"

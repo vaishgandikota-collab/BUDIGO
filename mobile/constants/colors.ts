@@ -18,6 +18,11 @@ export const Colors = {
   border: '#E5DFE4',
   cardBackground: '#FFFFFF',
 
+  // Semantic text aliases (used by discover, maps, and other screens)
+  text: '#474459',           // alias for textPrimary
+  textMuted: '#817D87',      // alias for mutedText
+  textSecondary: '#9B97A0',  // lighter muted for secondary copy
+
   // Status Indicators
   success: '#3D9873',
   warning: '#D99A45',

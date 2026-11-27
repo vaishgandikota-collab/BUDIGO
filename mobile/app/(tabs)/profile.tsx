@@ -8,6 +8,7 @@ import {
   Switch,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
@@ -25,7 +26,17 @@ export default function ProfileScreen() {
   const [arrivalPush, setArrivalPush] = useState(true);
   const [meetingAlerts, setMeetingAlerts] = useState(true);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+        ? window.confirm('Are you sure you want to log out of Budigo?')
+        : true;
+      if (confirmed) {
+        await logout();
+        router.replace('/(auth)/login');
+      }
+      return;
+    }
     Alert.alert('Sign Out', 'Are you sure you want to log out of Budigo?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -47,15 +58,24 @@ export default function ProfileScreen() {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <Avatar
-            name={user?.full_name || 'Aarav Sharma'}
+            name={user?.full_name || 'Guest Traveler'}
             size={72}
             markerColor={Colors.primary}
           />
-          <Text style={styles.profileName}>{user?.full_name || 'Aarav Sharma'}</Text>
-          <Text style={styles.profileEmail}>{user?.email || 'aarav@budigo.app'}</Text>
-          <View style={styles.verifiedBadge}>
-            <Text style={styles.verifiedText}>✓ Verified Traveler</Text>
-          </View>
+          <Text style={styles.profileName}>{user?.full_name || 'Guest Traveler'}</Text>
+          <Text style={styles.profileEmail}>{user?.email || 'Not signed in'}</Text>
+          {user ? (
+            <View style={styles.verifiedBadge}>
+              <Text style={styles.verifiedText}>✓ Verified Traveler</Text>
+            </View>
+          ) : (
+            <Button
+              title="Sign In / Register"
+              size="sm"
+              onPress={() => router.push('/(auth)/login')}
+              style={{ marginTop: 12 }}
+            />
+          )}
         </View>
 
         {/* Location & Privacy Section */}
@@ -135,12 +155,14 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <Button
-            title="Log Out"
-            variant="danger"
-            onPress={handleLogout}
-            style={{ marginTop: 18 }}
-          />
+          {user && (
+            <Button
+              title="Log Out"
+              variant="danger"
+              onPress={handleLogout}
+              style={{ marginTop: 18 }}
+            />
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
