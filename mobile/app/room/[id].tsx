@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import { Colors } from '../../constants/colors';
 import { useRoom } from '../../hooks/useRoom';
 import { useLocationTracking } from '../../hooks/useLocationTracking';
 import { useAuth } from '../../hooks/useAuth';
+import { api } from '../../services/api';
+import { LocationService } from '../../services/location';
 import { MapView } from '../../components/maps/MapView';
 import { MemberListItem } from '../../components/room/MemberListItem';
 import { MemberDetailSheet } from '../../components/members/MemberDetailSheet';
@@ -40,7 +42,97 @@ export default function TravelRoomMapScreen() {
   } = useRoom(id);
 
   // Hook up device GPS tracking for this active room
-  const { isSharing, trackingState, currentCoords, toggleSharing } = useLocationTracking(id, Boolean(room));
+  const { isSharing, trackingState, currentCoords, currentTelemetry, toggleSharing } = useLocationTracking(id, Boolean(room));
+
+  // Road route distance & ETA from Google Routes API for current user
+  const [myRouteMetrics, setMyRouteMetrics] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
+  const lastRouteOriginRef = useRef<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    if (!room?.destination_latitude || !room?.destination_longitude || !currentCoords) return;
+    if (lastRouteOriginRef.current) {
+      const moved = LocationService.calculateDistance(currentCoords, lastRouteOriginRef.current);
+      if (moved < 100) return;
+    }
+    lastRouteOriginRef.current = currentCoords;
+    let cancelled = false;
+    api.calculateRoute(
+      currentCoords,
+      { latitude: room.destination_latitude, longitude: room.destination_longitude },
+      'DRIVE'
+    ).then((res) => {
+      if (!cancelled && res.success && res.route) {
+        setMyRouteMetrics({
+          distanceMeters: res.route.distanceMeters,
+          durationSeconds: res.route.durationSeconds,
+        });
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentCoords?.latitude, currentCoords?.longitude, room?.destination_latitude, room?.destination_longitude]);
+
+  // Merge local GPS telemetry (distance, ETA, speed) into the locations map for the current user
+  const mergedLocations = React.useMemo(() => {
+    if (!user?.id || !currentCoords) return locations;
+    const merged = new Map(locations);
+    const existing = merged.get(user.id);
+    // Prefer Google Routes road distance/ETA, then server values, then Haversine fallback
+    let distMeters = myRouteMetrics?.distanceMeters ?? existing?.distance_to_dest_meters;
+    let etaSecs = myRouteMetrics?.durationSeconds ?? existing?.eta_seconds;
+    const gpsSpeed = currentTelemetry?.speed ?? existing?.speed ?? 0;
+    if (room && currentCoords) {
+      const haversineDist = LocationService.calculateDistance(currentCoords, {
+        latitude: room.destination_latitude || 0,
+        longitude: room.destination_longitude || 0,
+      });
+      if (distMeters === undefined || distMeters === null) {
+        distMeters = Math.round(haversineDist);
+      }
+      if (etaSecs === undefined || etaSecs === null) {
+        if (gpsSpeed > 0.5) {
+          etaSecs = Math.round(distMeters / gpsSpeed);
+        } else {
+          etaSecs = Math.round((distMeters / 1000) / 30 * 3600);
+        }
+      }
+    }
+    const status =
+      distMeters !== undefined && distMeters < 150
+        ? 'Arrived'
+        : distMeters !== undefined && distMeters < 1000
+        ? 'Near Destination'
+        : 'On the Way';
+    merged.set(user.id, {
+      room_id: id,
+      user_id: user.id,
+      latitude: currentCoords.latitude,
+      longitude: currentCoords.longitude,
+      accuracy: currentTelemetry?.accuracy ?? undefined,
+      speed: gpsSpeed,
+      heading: currentTelemetry?.heading ?? undefined,
+      distance_to_dest_meters: distMeters,
+      eta_seconds: etaSecs,
+      status,
+      displayName: existing?.displayName || user.full_name || 'You',
+      markerColor: existing?.markerColor || '#D1956A',
+      updated_at: new Date().toISOString(),
+    });
+    return merged;
+  }, [locations, currentCoords, currentTelemetry, myRouteMetrics, user?.id, user?.full_name, room, id]);
+
+  // Merge live distance, ETA, and status into members list as well
+  const mergedMembers = React.useMemo(() => {
+    return members.map((m) => {
+      const loc = mergedLocations.get(m.user_id);
+      if (!loc) return m;
+      return {
+        ...m,
+        distance_to_dest_meters: loc.distance_to_dest_meters ?? m.distance_to_dest_meters,
+        eta_seconds: loc.eta_seconds ?? m.eta_seconds,
+        status: loc.status ?? m.status,
+      };
+    });
+  }, [members, mergedLocations]);
 
   // Selected member for detail sheet
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -89,9 +181,9 @@ export default function TravelRoomMapScreen() {
     );
   }
 
-  const selectedMember = members.find((m) => m.user_id === selectedMemberId);
-  const selectedLocation = selectedMemberId ? locations.get(selectedMemberId) : undefined;
-  const arrivedCount = members.filter((m) => m.status === 'Arrived').length;
+  const selectedMember = mergedMembers.find((m) => m.user_id === selectedMemberId);
+  const selectedLocation = selectedMemberId ? mergedLocations.get(selectedMemberId) : undefined;
+  const arrivedCount = mergedMembers.filter((m) => m.status === 'Arrived').length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -157,7 +249,7 @@ export default function TravelRoomMapScreen() {
                 room={room}
                 currentUserId={user?.id}
                 myLocation={currentCoords}
-                locations={locations}
+                locations={mergedLocations}
                 meetingPoint={confirmedMeetingPoint}
                 onSelectMember={(memberId) => setSelectedMemberId(memberId)}
               />
@@ -167,7 +259,16 @@ export default function TravelRoomMapScreen() {
             <View style={styles.desktopActionsRow}>
               <TouchableOpacity
                 style={[styles.desktopActionBtn, styles.primaryActionBtn]}
-                onPress={() => router.push({ pathname: '/meeting-points/finder', params: { roomId: room.id } })}
+                onPress={() => router.push({
+                  pathname: '/meeting-points/finder',
+                  params: {
+                    roomId: room.id,
+                    destName: room.destination_name,
+                    destAddress: room.destination_address || '',
+                    destLat: String(room.destination_latitude),
+                    destLon: String(room.destination_longitude),
+                  },
+                })}
                 activeOpacity={0.85}
               >
                 <Text style={styles.desktopActionIcon}>⭐</Text>
@@ -242,7 +343,7 @@ export default function TravelRoomMapScreen() {
               </View>
 
               <View style={styles.membersList}>
-                {members.map((member) => (
+                {mergedMembers.map((member) => (
                   <MemberListItem
                     key={member.id}
                     member={member}
@@ -263,7 +364,7 @@ export default function TravelRoomMapScreen() {
               room={room}
               currentUserId={user?.id}
               myLocation={currentCoords}
-              locations={locations}
+              locations={mergedLocations}
               meetingPoint={confirmedMeetingPoint}
               onSelectMember={(memberId) => setSelectedMemberId(memberId)}
             />
@@ -275,7 +376,16 @@ export default function TravelRoomMapScreen() {
             <View style={styles.mobileShortcutsRow}>
               <TouchableOpacity
                 style={[styles.mobileShortcutBtn, styles.primaryShortcutBtn]}
-                onPress={() => router.push({ pathname: '/meeting-points/finder', params: { roomId: room.id } })}
+                onPress={() => router.push({
+                  pathname: '/meeting-points/finder',
+                  params: {
+                    roomId: room.id,
+                    destName: room.destination_name,
+                    destAddress: room.destination_address || '',
+                    destLat: String(room.destination_latitude),
+                    destLon: String(room.destination_longitude),
+                  },
+                })}
                 activeOpacity={0.85}
               >
                 <Text style={styles.mobileShortcutIcon}>⭐</Text>
@@ -331,7 +441,7 @@ export default function TravelRoomMapScreen() {
                 nestedScrollEnabled
                 showsVerticalScrollIndicator={false}
               >
-                {members.map((member) => (
+                {mergedMembers.map((member) => (
                   <MemberListItem
                     key={member.id}
                     member={member}
@@ -351,6 +461,11 @@ export default function TravelRoomMapScreen() {
         member={selectedMember}
         location={selectedLocation}
         destinationName={room.destination_name}
+        destinationCoords={
+          room.destination_latitude && room.destination_longitude
+            ? { latitude: room.destination_latitude, longitude: room.destination_longitude }
+            : undefined
+        }
         onClose={() => setSelectedMemberId(null)}
       />
     </SafeAreaView>

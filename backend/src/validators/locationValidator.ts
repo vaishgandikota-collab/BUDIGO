@@ -40,6 +40,12 @@ export const searchMeetingPointsSchema = z.object({
   ]).default('all'),
   radiusMeters: z.number().min(500).max(50000).optional().default(2000),
   mode: z.enum(['near_destination', 'fair_for_everyone']).optional().default('near_destination'),
+  destination: z.object({
+    name: z.string(),
+    address: z.string().optional(),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+  }).optional(),
   customParticipants: z.array(z.object({
     userId: z.string(),
     displayName: z.string(),

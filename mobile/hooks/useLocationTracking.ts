@@ -24,6 +24,7 @@ export function useLocationTracking(roomId: string | undefined, active = true) {
 
       const now = Date.now();
       const last = lastDispatchedRef.current;
+      let computedSpeed = loc.speed;
 
       if (last) {
         const dist = LocationService.calculateDistance(
@@ -32,9 +33,12 @@ export function useLocationTracking(roomId: string | undefined, active = true) {
         );
 
         const elapsedMs = now - last.time;
+        if ((computedSpeed === null || computedSpeed === undefined) && elapsedMs > 1000) {
+          computedSpeed = dist / (elapsedMs / 1000);
+        }
 
         // Stationary check: moved < 8 meters and speed < 1 m/s
-        const isStationary = dist < 8 && (loc.speed === null || loc.speed < 1.0);
+        const isStationary = dist < 8 && (computedSpeed === null || computedSpeed < 1.0);
         isStationaryRef.current = isStationary;
 
         // If stationary, only transmit once every 45 seconds to conserve battery
@@ -48,9 +52,14 @@ export function useLocationTracking(roomId: string | undefined, active = true) {
         }
       }
 
+      const enrichedLoc: GPSLocationPoint = {
+        ...loc,
+        speed: computedSpeed ?? 0,
+      };
+
       lastDispatchedRef.current = { lat: loc.latitude, lon: loc.longitude, time: now };
       setCurrentCoords({ latitude: loc.latitude, longitude: loc.longitude });
-      setCurrentTelemetry(loc);
+      setCurrentTelemetry(enrichedLoc);
       setTrackingState('active');
 
       const payload = {
@@ -58,7 +67,7 @@ export function useLocationTracking(roomId: string | undefined, active = true) {
         latitude: loc.latitude,
         longitude: loc.longitude,
         accuracy: loc.accuracy ?? undefined,
-        speed: loc.speed ?? undefined,
+        speed: enrichedLoc.speed ?? undefined,
         heading: loc.heading ?? undefined,
         timestamp: loc.timestamp,
       };
@@ -66,9 +75,18 @@ export function useLocationTracking(roomId: string | undefined, active = true) {
       // 1. Socket.IO low latency peer distribution
       socketService.sendLocationUpdate(payload);
 
-      // 2. Persist to REST / PostgreSQL
+      // 2. Persist to REST / PostgreSQL and read back computed distance/ETA
       try {
-        await api.updateLocation(payload);
+        const res = await api.updateLocation(payload);
+        // Feed the server-computed distance & ETA back into local telemetry
+        if (res && (res.distanceMeters !== undefined || res.etaSeconds !== undefined)) {
+          setCurrentTelemetry((prev) => prev ? {
+            ...prev,
+            distance_to_dest_meters: res.distanceMeters,
+            eta_seconds: res.etaSeconds,
+            status: res.status,
+          } as any : prev);
+        }
       } catch (err) {
         console.warn('[useLocationTracking] REST update error:', err);
       }

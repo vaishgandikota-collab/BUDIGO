@@ -26,7 +26,7 @@ export class MeetingPointController {
         return res.status(400).json({ success: false, errors: parsed.error.format() });
       }
 
-      const { roomId, category, radiusMeters, mode, customParticipants } = parsed.data;
+      const { roomId, category, radiusMeters, mode, destination, customParticipants } = parsed.data;
 
       // 1. Automatically retrieve the room and its saved destination
       let roomDestination = { ...DEMO_DESTINATION };
@@ -62,6 +62,16 @@ export class MeetingPointController {
           };
           roomFound = true;
         }
+      }
+
+      if (!roomFound && destination && destination.latitude && destination.longitude) {
+        roomDestination = {
+          name: destination.name || 'Selected Destination',
+          address: destination.address || '',
+          latitude: Number(destination.latitude),
+          longitude: Number(destination.longitude),
+        };
+        roomFound = true;
       }
 
       let meetingPoints: MeetingPoint[] = [];

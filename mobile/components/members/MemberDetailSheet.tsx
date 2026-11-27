@@ -11,6 +11,7 @@ interface MemberDetailSheetProps {
   member?: RoomMember;
   location?: LiveLocation;
   destinationName: string;
+  destinationCoords?: { latitude: number; longitude: number };
   onClose: () => void;
 }
 
@@ -19,16 +20,39 @@ export const MemberDetailSheet: React.FC<MemberDetailSheetProps> = ({
   member,
   location,
   destinationName,
+  destinationCoords,
   onClose,
 }) => {
   if (!member) return null;
 
+  // Compute distance locally via Haversine if server didn't provide it
+  let computedDistMeters = location?.distance_to_dest_meters ?? member.distance_to_dest_meters;
+  let computedEtaSecs = location?.eta_seconds ?? member.eta_seconds;
+  if ((computedDistMeters === undefined || computedDistMeters === null) && location && destinationCoords) {
+    const R = 6371e3;
+    const phi1 = (location.latitude * Math.PI) / 180;
+    const phi2 = (destinationCoords.latitude * Math.PI) / 180;
+    const dPhi = ((destinationCoords.latitude - location.latitude) * Math.PI) / 180;
+    const dLam = ((destinationCoords.longitude - location.longitude) * Math.PI) / 180;
+    const a = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLam / 2) ** 2;
+    computedDistMeters = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  }
+  if ((computedEtaSecs === undefined || computedEtaSecs === null) && computedDistMeters !== undefined) {
+    const gpsSpeed = location?.speed ?? 0;
+    if (gpsSpeed > 0.5) {
+      computedEtaSecs = Math.round(computedDistMeters / gpsSpeed);
+    } else {
+      // Estimate at ~30 km/h average city speed
+      computedEtaSecs = Math.round((computedDistMeters / 1000) / 30 * 3600);
+    }
+  }
+
   const speedKmh = location?.speed ? (location.speed * 3.6).toFixed(1) : '0';
-  const distanceKm = location?.distance_to_dest_meters
-    ? (location.distance_to_dest_meters / 1000).toFixed(1)
+  const distanceKm = computedDistMeters !== undefined && computedDistMeters !== null
+    ? (computedDistMeters / 1000).toFixed(1)
     : '--';
-  const etaMins = location?.eta_seconds
-    ? Math.round(location.eta_seconds / 60)
+  const etaMins = computedEtaSecs !== undefined && computedEtaSecs !== null
+    ? Math.round(computedEtaSecs / 60)
     : '--';
 
   return (

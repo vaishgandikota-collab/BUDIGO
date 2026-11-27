@@ -47,8 +47,8 @@ const MeetingPointsMapFrame = ({
   selectedId: string | null;
 }) => {
   const selectedPoint = meetingPoints.find((m) => m.id === selectedId) || meetingPoints[0];
-  const destLat = destination.latitude || 17.4239;
-  const destLon = destination.longitude || 78.4738;
+  const destLat = destination.latitude;
+  const destLon = destination.longitude;
 
   // Prepare map data
   const pointsData = meetingPoints.map((mp, idx) => ({
@@ -279,7 +279,13 @@ const MeetingPointsMapFrame = ({
 };
 
 export default function MeetingPointFinderScreen() {
-  const params = useLocalSearchParams<{ roomId?: string }>();
+  const params = useLocalSearchParams<{
+    roomId?: string;
+    destName?: string;
+    destAddress?: string;
+    destLat?: string;
+    destLon?: string;
+  }>();
   const roomId = params.roomId || 'budi26-mock-room-id';
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -290,33 +296,113 @@ export default function MeetingPointFinderScreen() {
   const [selectedRadius, setSelectedRadius] = useState(2000);
   const [recommendations, setRecommendations] = useState<MeetingPoint[]>([]);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
-  const [roomDestination, setRoomDestination] = useState({
-    name: 'Tank Bund / Hussain Sagar',
-    address: 'Hussain Sagar Promenade, Hyderabad, Telangana 500004',
-    latitude: 17.4239,
-    longitude: 78.4738,
+
+  // Build initial destination from URL params if available, otherwise use a neutral default
+  // that will be overwritten once the room data or search API responds.
+  const [roomDestination, setRoomDestination] = useState(() => {
+    const paramLat = params.destLat ? parseFloat(params.destLat) : NaN;
+    const paramLon = params.destLon ? parseFloat(params.destLon) : NaN;
+    if (!isNaN(paramLat) && !isNaN(paramLon)) {
+      return {
+        name: params.destName || 'Selected Destination',
+        address: params.destAddress || '',
+        latitude: paramLat,
+        longitude: paramLon,
+      };
+    }
+    // Neutral default – will be replaced by API or room lookup below
+    return {
+      name: 'Loading destination…',
+      address: '',
+      latitude: 17.3850,
+      longitude: 78.4867,
+    };
   });
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // On mount, fetch the room details to get the real destination
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const roomRes = await api.getRoom(roomId);
+        if (cancelled) return;
+        if (roomRes.success && roomRes.room) {
+          const r = roomRes.room;
+          if (r.destination_latitude && r.destination_longitude) {
+            setRoomDestination({
+              name: r.destination_name || 'Destination',
+              address: r.destination_address || '',
+              latitude: r.destination_latitude,
+              longitude: r.destination_longitude,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[MeetingPointFinder] Could not fetch room destination:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [roomId]);
+
   const fetchRecommendations = async (
     cat = selectedCategory,
     rad = selectedRadius,
-    searchMode = mode
+    searchMode = mode,
+    explicitDest?: { name: string; address?: string; latitude: number; longitude: number }
   ) => {
     try {
       setLoading(true);
       setErrorMsg(null);
 
+      let targetDest = explicitDest;
+      if (!targetDest) {
+        const paramLat = params.destLat ? parseFloat(params.destLat) : NaN;
+        const paramLon = params.destLon ? parseFloat(params.destLon) : NaN;
+        if (!isNaN(paramLat) && !isNaN(paramLon)) {
+          targetDest = {
+            name: params.destName || 'Selected Destination',
+            address: params.destAddress || '',
+            latitude: paramLat,
+            longitude: paramLon,
+          };
+        } else {
+          try {
+            const roomRes = await api.getRoom(roomId);
+            if (roomRes.success && roomRes.room?.destination_latitude && roomRes.room?.destination_longitude) {
+              targetDest = {
+                name: roomRes.room.destination_name || 'Selected Destination',
+                address: roomRes.room.destination_address || '',
+                latitude: roomRes.room.destination_latitude,
+                longitude: roomRes.room.destination_longitude,
+              };
+            }
+          } catch {
+            // Room lookup failed; backend will resolve or use default
+          }
+        }
+      }
+
+      if (targetDest) {
+        setRoomDestination({
+          name: targetDest.name,
+          address: targetDest.address || '',
+          latitude: targetDest.latitude,
+          longitude: targetDest.longitude,
+        });
+      }
+
       const res = await api.searchMeetingPoints(roomId, cat, {
         radiusMeters: rad,
         mode: searchMode,
+        destination: targetDest,
       });
 
       if (res.success && res.recommendations) {
         setRecommendations(res.recommendations);
-        if (res.roomDestination) {
+        if (res.roomDestination && !targetDest) {
           setRoomDestination(res.roomDestination);
         }
         if (res.recommendations.length > 0) {
@@ -334,7 +420,7 @@ export default function MeetingPointFinderScreen() {
 
   useEffect(() => {
     fetchRecommendations(selectedCategory, selectedRadius, mode);
-  }, [roomId, mode]);
+  }, [roomId, mode, params.destLat, params.destLon]);
 
   const onSelectCategory = (cat: string) => {
     setSelectedCategory(cat);

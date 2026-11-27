@@ -104,11 +104,12 @@ export class LocationService {
   }
 
   /**
-   * Checks whether the GPS reading has acceptable accuracy (<= 35m)
+   * Checks whether the GPS reading has acceptable accuracy
    */
   static isAccuracyAcceptable(accuracy: number | null | undefined): boolean {
     if (accuracy === null || accuracy === undefined) return true;
-    return accuracy <= 35;
+    // Desktop browsers often report Wi-Fi/IP geolocation accuracy of 100m-2000m
+    return Platform.OS === 'web' ? accuracy <= 5000 : accuracy <= 100;
   }
 
   /**

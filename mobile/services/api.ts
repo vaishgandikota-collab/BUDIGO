@@ -314,7 +314,7 @@ class ApiService {
         member_role: 'creator',
         joined_at: new Date().toISOString(),
         location_sharing_enabled: true,
-        status: 'Arrived',
+        status: 'On the Way',
       };
       await saveStoredRoom(fallbackRoom);
       return { success: true, room: fallbackRoom, member: fallbackMember };
@@ -503,6 +503,7 @@ class ApiService {
     options?: {
       radiusMeters?: number;
       mode?: 'near_destination' | 'fair_for_everyone';
+      destination?: { name: string; address?: string; latitude: number; longitude: number };
       customParticipants?: any[];
     }
   ) {
@@ -526,6 +527,7 @@ class ApiService {
           category,
           radiusMeters: options?.radiusMeters || 2000,
           mode: options?.mode || 'near_destination',
+          destination: options?.destination,
           customParticipants: options?.customParticipants,
         }),
       }
