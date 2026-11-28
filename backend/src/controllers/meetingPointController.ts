@@ -172,41 +172,50 @@ export class MeetingPointController {
           radiusMeters
         );
 
-        meetingPoints = candidatePlaces.slice(0, 3).map((c, idx) => ({
-          id: `mp_dest_${Date.now()}_${idx + 1}`,
-          room_id: roomId,
-          place_id: c.placeId,
-          place_name: c.name,
-          category: c.category,
-          latitude: c.latitude,
-          longitude: c.longitude,
-          address: c.address,
-          rating: c.rating,
-          user_rating_count: c.userRatingCount,
-          open_now: c.openNow,
-          open_status_text: c.openStatusText,
-          google_maps_uri: c.googleMapsUri,
-          distance_from_dest_meters: c.distanceFromDestMeters,
-          driving_time_from_dest_seconds: c.drivingTimeFromDestSeconds,
-          dest_route_polyline: c.destRoutePolyline,
-          ranking_score: Math.max(70, Math.min(99, Math.round(98 - idx * 3))),
-          maximum_travel_time: c.drivingTimeFromDestSeconds || 300,
-          total_travel_time: c.drivingTimeFromDestSeconds || 300,
-          average_travel_time: c.drivingTimeFromDestSeconds || 300,
-          is_confirmed: false,
-          created_at: new Date().toISOString(),
-          routes: [
-            {
-              meeting_point_id: `mp_dest_${Date.now()}_${idx + 1}`,
-              user_id: 'destination',
-              distance_meters: c.distanceFromDestMeters || 1000,
-              duration_seconds: c.drivingTimeFromDestSeconds || 300,
-              polyline: c.destRoutePolyline,
-              user_display_name: roomDestination.name,
-              marker_color: '#D1956A',
-            },
-          ],
-        }));
+        // Return ALL candidate places (Google Places returns up to 20)
+        meetingPoints = candidatePlaces.map((c, idx) => {
+          // Smart ranking score: use the actual composite score from the sorted list
+          // Top item gets ~98, subsequent items decrease proportionally based on count
+          const totalCount = candidatePlaces.length;
+          const step = totalCount > 1 ? 30 / (totalCount - 1) : 0; // spread scores over 30-point range (98 down to ~68)
+          const rankingScore = Math.max(50, Math.round(98 - idx * step));
+
+          return {
+            id: `mp_dest_${Date.now()}_${idx + 1}`,
+            room_id: roomId,
+            place_id: c.placeId,
+            place_name: c.name,
+            category: c.category,
+            latitude: c.latitude,
+            longitude: c.longitude,
+            address: c.address,
+            rating: c.rating,
+            user_rating_count: c.userRatingCount,
+            open_now: c.openNow,
+            open_status_text: c.openStatusText,
+            google_maps_uri: c.googleMapsUri,
+            distance_from_dest_meters: c.distanceFromDestMeters,
+            driving_time_from_dest_seconds: c.drivingTimeFromDestSeconds,
+            dest_route_polyline: c.destRoutePolyline,
+            ranking_score: rankingScore,
+            maximum_travel_time: c.drivingTimeFromDestSeconds || 300,
+            total_travel_time: c.drivingTimeFromDestSeconds || 300,
+            average_travel_time: c.drivingTimeFromDestSeconds || 300,
+            is_confirmed: false,
+            created_at: new Date().toISOString(),
+            routes: [
+              {
+                meeting_point_id: `mp_dest_${Date.now()}_${idx + 1}`,
+                user_id: 'destination',
+                distance_meters: c.distanceFromDestMeters || 1000,
+                duration_seconds: c.drivingTimeFromDestSeconds || 300,
+                polyline: c.destRoutePolyline,
+                user_display_name: roomDestination.name,
+                marker_color: '#D1956A',
+              },
+            ],
+          };
+        });
       }
 
       // 3. Persist to DB or Memory
